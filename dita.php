@@ -96,6 +96,24 @@ function dita_get_items($xml)
     return array(array(), $items);
 }
 
+function dita_insert_ditas($files)
+{
+    for($i=0; $i<count($files['name']); $i++) {
+        $contents = file_get_contents($files['tmp_name'][$i]);
+        $title = (string) (array_pop(@simplexml_load_string($contents)->xpath('//topic/title/text()')));
+        $my_post = array();
+        $my_post['post_title']    = $title;
+        $my_post['post_content']  = $contents;
+        $my_post['post_status']   = 'publish';
+        $my_post['post_author']   = 1;
+        $my_post['post_category'] = array(0);
+        $ids_titles[] = wp_insert_post($my_post);
+        $ids_titles[$files['name'][$i]] = array($id, $title);
+
+    }
+    return $ids_titles;
+}
+
 function dita_init()
 {
     if (!session_id()) {
@@ -187,21 +205,33 @@ function dita_dashboard()
         switch ($action) {
         case 'upload':
             if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-                $id = get_the_ID();
-                list($errors, $items) = dita_get_items(
-                    file_get_contents($_FILES['file_1']['tmp_name']));
-                    for($i=0; $i<count($_FILES['file_2']['name']); $i++) {
-                        $a = str_replace('<', '&lt;', file_get_contents($_FILES['file_2']['tmp_name'][$i]));
+                list($errors, $items) = array('', '');
+                    $ids_titles = dita_insert_ditas($_FILES['file_2']);
+                $html = array();
+
+                foreach (@simplexml_load_string(file_get_contents($_FILES['file_1']['tmp_name']))->xpath('//bookmap') AS $key => $value) {
+                    $html[] = sprintf('<h1>%s</h1>', (string) array_pop($value->xpath('title')));
+                    $html[] = sprintf('<p>%s</p>', (string) array_pop($value->xpath('abstract')));
+                }
+                    foreach ($value->xpath('//chapter') AS $chapter) {
+                        $id_title = $ids_titles[(string) array_pop($chapter->xpath('@href'))];
+                        $html[] = '<div>';
+                        $html[] = '<h2>';
+                        $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
+                        $html[] = '</a>';
+                        $html[] = '</h2>';
+                        foreach ($chapter->xpath('//topicref') AS $topicref) {
+                            $id_title = $ids_titles[(string) array_pop($topicref->xpath('@href'))];
+                            $html[] = '<li>';
+                            $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
+                            $html[] = '</a>';
+                            $html[] = '</li>';
+                        }
+                        $html[] = '</div>';
                     }
-// To insert POST
-/*                $my_post = array();
-                $my_post['post_title']    = 'Table of contents';
-                $my_post['post_content']  = 'My Post';
-                $my_post['post_status']   = 'publish';
-                $my_post['post_author']   = 1;
-                $my_post['post_category'] = array(0);
-                wp_insert_post($my_post);
-*/
+
+
+
                 if ($errors) {
                     $_SESSION['dita']['flashes'] = array(
                         'error' => 'The document was not uploaded successfully. Please try again.',
@@ -300,9 +330,61 @@ function dita_dashboard()
 // {
 // }
 
-// function dita_save_post($page_id)
-// {
-// }
+function dita_save_post($page_id)
+{
+    if (!isset($_POST['dita_add_meta_boxes_1'])) {
+        return $page_id;
+    }
+    if (!wp_verify_nonce($_POST['dita_add_meta_boxes_1'], 'dita_add_meta_boxes_1')) {
+        return $page_id;
+    }
+    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
+        return $page_id;
+    }
+    if ('page' === $_POST['post_type']) {
+        if (!current_user_can('edit_page', $page_id)) {
+            return $page_id;
+        }
+    } else {
+        if (!current_user_can('edit_post', $page_id)) {
+            return $page_id;
+        }
+    }
+    $annotations = array();
+    foreach ($_POST['dita_3_ontologies'] AS $key => $_) {
+        if (
+            !empty($_POST['dita_3_ontologies'][$key])
+            and
+            !empty($_POST['dita_3_classes'][$key])
+            and
+            !empty($_POST['dita_3_properties'][$key])
+            and
+            !empty($_POST['dita_3_values'][$key])
+        ) {
+            $annotations[] = array(
+                'ontology' => $_POST['dita_3_ontologies'][$key],
+                'class' => $_POST['dita_3_classes'][$key],
+                'property' => $_POST['dita_3_properties'][$key],
+                'value' => $_POST['dita_3_values'][$key],
+            );
+        }
+    }
+    update_post_meta(
+        $page_id, 'dita_1_multipage_report', $_POST['dita_1_multipage_report']
+    );
+    update_post_meta(
+        $page_id, 'dita_1_root', $_POST['dita_1_root']
+    );
+    update_post_meta(
+        $page_id, 'dita_2_table_of_contents', $_POST['dita_2_table_of_contents']
+    );
+    update_post_meta(
+        $page_id, 'dita_2_references', $_POST['dita_2_references']
+    );
+    update_post_meta(
+        $page_id, 'dita_3', json_encode($annotations)
+    );
+}
 
 register_activation_hook(__FILE__, 'dita_register_activation_hook');
 register_deactivation_hook(__FILE__, 'dita_register_deactivation_hook');
