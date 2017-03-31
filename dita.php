@@ -62,40 +62,6 @@ function dita_get_prefix()
     return sprintf('%sdita_', $GLOBALS['wpdb']->prefix);
 }
 
-// function dita_get_shortcodes($contents)
-// {
-// }
-
-function dita_get_items($xml)
-{
-    $items = array();
-
-    foreach (@simplexml_load_string($xml)->xpath('//bookmap') AS $key => $value) {
-        try {
-            $item = array();
-
-            $item['title'] = (string) array_pop($value->xpath('title'));
-
-            $item['abstract'] = (string) array_pop($value->xpath('abstract'));
-
-            $item['chapter'] = array();
-            foreach ($value->xpath('//chapter') AS $chapter) {
-                $item['chapter'][] = (string) array_pop($chapter->xpath('@href'));
-                $item['chapter'][] = array(
-                    'topichead' => (string) (array_pop($chapter->xpath('topichead/@navtitle'))),
-                    'topicref' => (string) (array_pop($chapter->xpath('topicref/@href'))),
-                );
-            }
-
-            $items[] = $item;
-        } catch (Exception $exception) {
-            return array(sprintf('dita_get_items() - %s', $exception->getMessage()), array());
-        }
-    }
-    echo "<br/>";
-    return array(array(), $items);
-}
-
 function dita_insert_ditas($files)
 {
     for($i=0; $i<count($files['name']); $i++) {
@@ -205,8 +171,7 @@ function dita_dashboard()
         switch ($action) {
         case 'upload':
             if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-                list($errors, $items) = array('', '');
-                    $ids_titles = dita_insert_ditas($_FILES['file_2']);
+                $ids_titles = dita_insert_ditas($_FILES['file_2']);
                 $html = array();
 
                 foreach (@simplexml_load_string(file_get_contents($_FILES['file_1']['tmp_name']))->xpath('//bookmap') AS $key => $value) {
@@ -220,28 +185,29 @@ function dita_dashboard()
                         $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
                         $html[] = '</a>';
                         $html[] = '</h2>';
-                        foreach ($chapter->xpath('//topicref') AS $topicref) {
-                            $id_title = $ids_titles[(string) array_pop($topicref->xpath('@href'))];
-                            $html[] = '<li>';
-                            $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
-                            $html[] = '</a>';
-                            $html[] = '</li>';
-                        }
+                        $html[] = '<ul>';
+                        $id_title = $ids_titles[(string) array_pop($chapter->xpath('topicref/@href'))];
+                        $html[] = '<li>';
+                        $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
+                        $html[] = '</a>';
+                        $html[] = '</li>';
+                        $html[] = '</ul>';
                         $html[] = '</div>';
                     }
 
-
+                $dom = new DOMDocument();
+                $dom->preserveWhiteSpace = FALSE;
+                $dom->formatOutput = TRUE;
+                $dom->loadHTML(implode("\n", $html));
+                $my_post = array();
+                $my_post['post_title']    = $_FILES['file_1']['name'];
+                $my_post['post_content']  = $dom->saveHTML();
+                $my_post['post_status']   = 'publish';
+                $my_post['post_author']   = 1;
+                $my_post['post_category'] = array(0);
+                wp_insert_post($my_post);
 
                 if ($errors) {
-                    $_SESSION['dita']['flashes'] = array(
-                        'error' => 'The document was not uploaded successfully. Please try again.',
-                    );
-                    ?>
-                    <meta content="0;url=<?php echo admin_url('admin.php?action=upload&page=dita'); ?>"http-equiv="refresh" >
-                    <?php
-                    die();
-                }
-                if (!$items) {
                     $_SESSION['dita']['flashes'] = array(
                         'error' => 'The document was not uploaded successfully. Please try again.',
                     );
@@ -332,58 +298,6 @@ function dita_dashboard()
 
 function dita_save_post($page_id)
 {
-    if (!isset($_POST['dita_add_meta_boxes_1'])) {
-        return $page_id;
-    }
-    if (!wp_verify_nonce($_POST['dita_add_meta_boxes_1'], 'dita_add_meta_boxes_1')) {
-        return $page_id;
-    }
-    if (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) {
-        return $page_id;
-    }
-    if ('page' === $_POST['post_type']) {
-        if (!current_user_can('edit_page', $page_id)) {
-            return $page_id;
-        }
-    } else {
-        if (!current_user_can('edit_post', $page_id)) {
-            return $page_id;
-        }
-    }
-    $annotations = array();
-    foreach ($_POST['dita_3_ontologies'] AS $key => $_) {
-        if (
-            !empty($_POST['dita_3_ontologies'][$key])
-            and
-            !empty($_POST['dita_3_classes'][$key])
-            and
-            !empty($_POST['dita_3_properties'][$key])
-            and
-            !empty($_POST['dita_3_values'][$key])
-        ) {
-            $annotations[] = array(
-                'ontology' => $_POST['dita_3_ontologies'][$key],
-                'class' => $_POST['dita_3_classes'][$key],
-                'property' => $_POST['dita_3_properties'][$key],
-                'value' => $_POST['dita_3_values'][$key],
-            );
-        }
-    }
-    update_post_meta(
-        $page_id, 'dita_1_multipage_report', $_POST['dita_1_multipage_report']
-    );
-    update_post_meta(
-        $page_id, 'dita_1_root', $_POST['dita_1_root']
-    );
-    update_post_meta(
-        $page_id, 'dita_2_table_of_contents', $_POST['dita_2_table_of_contents']
-    );
-    update_post_meta(
-        $page_id, 'dita_2_references', $_POST['dita_2_references']
-    );
-    update_post_meta(
-        $page_id, 'dita_3', json_encode($annotations)
-    );
 }
 
 register_activation_hook(__FILE__, 'dita_register_activation_hook');
@@ -393,8 +307,4 @@ add_action('init', 'dita_init');
 
 add_action('admin_init', 'dita_admin_init');
 add_action('admin_menu', 'dita_admin_menu');
-add_action('add_meta_boxes', 'dita_add_meta_boxes');
 add_action('save_post', 'dita_save_post');
-add_action('wp_head', 'dita_wp_head', 90);
-
-add_filter('the_content', 'dita_the_content', 90);
