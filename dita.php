@@ -180,19 +180,23 @@ function dita_dashboard()
                 }
                     foreach ($value->xpath('//chapter') AS $chapter) {
                         $id_title = $ids_titles[(string) array_pop($chapter->xpath('@href'))];
-                        $html[] = '<div>';
-                        $html[] = '<h2>';
-                        $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
-                        $html[] = '</a>';
-                        $html[] = '</h2>';
-                        $html[] = '<ul>';
-                        $id_title = $ids_titles[(string) array_pop($chapter->xpath('topicref/@href'))];
-                        $html[] = '<li>';
-                        $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
-                        $html[] = '</a>';
-                        $html[] = '</li>';
-                        $html[] = '</ul>';
-                        $html[] = '</div>';
+                        if (!empty($id_title)) {
+                            $html[] = '<div>';
+                            $html[] = '<h2>';
+                            $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
+                            $html[] = '</a>';
+                            $html[] = '</h2>';
+                            $id_title1 = $ids_titles[(string) array_pop($chapter->xpath('topicref/@href'))];
+                            if (!empty($id_title1)) {
+                                $html[] = '<ul>';
+                                $html[] = '<li>';
+                                $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title1[0]), $id_title1[1]);
+                                $html[] = '</a>';
+                                $html[] = '</li>';
+                                $html[] = '</ul>';
+                            }
+                            $html[] = '</div>';
+                        }
                     }
 
                 $dom = new DOMDocument();
@@ -291,10 +295,6 @@ function dita_dashboard()
     </div>
     <?php
 }
-
-// function dita_faq()
-// {
-// }
 
 function dita_save_post($page_id)
 {
