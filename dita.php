@@ -201,8 +201,8 @@ function dita_dashboard()
 
                 $dom = new DOMDocument();
                 $dom->preserveWhiteSpace = FALSE;
-                $dom->formatOutput = TRUE;
                 $dom->loadHTML(implode("\n", $html));
+                $dom->formatOutput = TRUE;
                 $my_post = array();
                 $my_post['post_title']    = $_FILES['file_1']['name'];
                 $my_post['post_content']  = $dom->saveHTML();
