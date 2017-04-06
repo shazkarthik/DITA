@@ -14,33 +14,6 @@ require_once 'vendors/php-csv-utils-0.3/Csv/Writer.php';
 
 libxml_use_internal_errors(true);
 
-function dita_delete($directory)
-{
-    $files = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($directory, RecursiveDirectoryIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::CHILD_FIRST
-    );
-    foreach ($files AS $file) {
-        if ($file->isDir()) {
-            rmdir($file->getRealPath());
-        } else {
-            unlink($file->getRealPath());
-        }
-    }
-}
-
-function dita_uasort($one, $two)
-{
-    preg_match("|[a-zA-Z]|", $one['string'], $match);
-    $one = $match[0];
-    preg_match("|[a-zA-Z]|", $two['string'], $match);
-    $two = $match[0];
-    if ($one === $two) {
-        return 0;
-    }
-    return ($one < $two)? -1: 1;
-}
-
 function dita_get_file($items)
 {
     array_unshift($items, 'files');
@@ -101,21 +74,7 @@ function dita_init()
         }
         unset($temporary);
     }
-    add_action('wp_enqueue_scripts', 'dita_scripts');
     add_action('wp_enqueue_scripts', 'dita_styles');
-}
-
-function dita_admin_init()
-{
-    add_action('admin_print_scripts', 'dita_scripts');
-    add_action('admin_print_styles', 'dita_styles');
-}
-
-function dita_scripts()
-{
-    wp_enqueue_script(
-        'all_js', sprintf('%s/dita.js', plugins_url('/dita')), array('jquery')
-    );
 }
 
 function dita_styles()
@@ -204,34 +163,22 @@ function dita_dashboard()
                 $dom->loadHTML(implode("\n", $html));
                 $dom->formatOutput = TRUE;
                 $my_post = array();
-                $my_post['post_title']    = $_FILES['file_1']['name'];
-                $my_post['post_content']  = $dom->saveHTML();
-                $my_post['post_status']   = 'publish';
-                $my_post['post_author']   = 1;
+                $my_post['post_title'] = $_FILES['file_1']['name'];
+                $my_post['post_content'] = $dom->saveHTML();
+                $my_post['post_status'] = 'publish';
+                $my_post['post_author'] = 1;
                 $my_post['post_category'] = array(0);
-                wp_insert_post($my_post);
+                $post_id = wp_insert_post($my_post);
 
-                if ($errors) {
+                if ($post_id == 0 || is_wp_error($post_id)) {
                     $_SESSION['dita']['flashes'] = array(
                         'error' => 'The document was not uploaded successfully. Please try again.',
                     );
                     ?>
-                    <meta content="0;url=<?php echo admin_url('admin.php?action=upload&page=dita'); ?>"http-equiv="refresh" >
+                    <meta content="0;url=<?php echo admin_url('admin.php?action=&page=dita'); ?>"http-equiv="refresh">
                     <?php
                     die();
                 }
-                $GLOBALS['wpdb']->insert(
-                    sprintf('%sdocuments', dita_get_prefix()),
-                    array(
-                        'name' => $_FILES['file_1']['name'],
-                    )
-                );
-                $document_id = $GLOBALS['wpdb']->insert_id;
-                dita_get_directory(array($document_id));
-                copy(
-                    $_FILES['file_1']['tmp_name'],
-                    dita_get_file(array($document_id, $_FILES['file_1']['name']))
-                );
                 $_SESSION['dita']['flashes'] = array(
                     'updated' => 'The document was uploaded successfully.',
                 );
@@ -299,12 +246,7 @@ function dita_dashboard()
 function dita_save_post($page_id)
 {
 }
-
-register_activation_hook(__FILE__, 'dita_register_activation_hook');
-register_deactivation_hook(__FILE__, 'dita_register_deactivation_hook');
-
 add_action('init', 'dita_init');
 
-add_action('admin_init', 'dita_admin_init');
 add_action('admin_menu', 'dita_admin_menu');
 add_action('save_post', 'dita_save_post');
