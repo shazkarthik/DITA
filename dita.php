@@ -145,18 +145,28 @@ function dita_dashboard()
                             $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
                             $html[] = '</a>';
                             $html[] = '</h2>';
-                            $id_title1 = $ids_titles[(string) array_pop($chapter->xpath('topicref/@href'))];
-                            if (!empty($id_title1)) {
+                            function process($chapter) {
+                                $topicref = $chapter->xpath('topicref/@href');
+                                if (empty($topicref)) {
+                                    return;
+                                }
+                                $id_title1 = $ids_titles[(string) array_pop($topicref)];
                                 $html[] = '<ul>';
                                 $html[] = '<li>';
                                 $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title1[0]), $id_title1[1]);
+                                foreach ($chapter->xpath('topicref') as $item)
+                                {
+                                    foreach ($item->children() as $child) {
+                                        echo process($child['href']);
+                                    }
+                                }
                                 $html[] = '</a>';
                                 $html[] = '</li>';
                                 $html[] = '</ul>';
                             }
                             $html[] = '</div>';
+                            }
                         }
-                    }
 
                 $dom = new DOMDocument();
                 $dom->preserveWhiteSpace = FALSE;
