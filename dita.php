@@ -118,6 +118,30 @@ function dita_flashes()
     <?php
 }
 
+function process($chapter, &$html, $ids_titles) {
+        $topicref = $chapter->xpath('topicref/@href');
+        if (empty($topicref)) {
+            return;
+        }
+        $id_title1 = $ids_titles[(string) array_pop($chapter->xpath('topicref/@href'))];
+        $html[] = '<ul>';
+        $html[] = '<li>';
+        $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title1[0]), $id_title1[1]);
+        foreach ($chapter->xpath('topicref') as $item)
+        {
+            foreach ($item->children() as $child) {
+                process($child, $html, $ids_titles);
+                foreach ($child->xpath('@href') AS $topic) {
+                    echo "<br/>";
+                    $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title1[0]), $id_title1[1]);
+                }
+            }
+        }
+        $html[] = '</a>';
+        $html[] = '</li>';
+        $html[] = '</ul>';
+}
+
 function dita_dashboard()
 {
     if (!current_user_can('manage_options')) {
@@ -145,28 +169,11 @@ function dita_dashboard()
                             $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
                             $html[] = '</a>';
                             $html[] = '</h2>';
-                            function process($chapter) {
-                                $topicref = $chapter->xpath('topicref/@href');
-                                if (empty($topicref)) {
-                                    return;
-                                }
-                                $id_title1 = $ids_titles[(string) array_pop($topicref)];
-                                $html[] = '<ul>';
-                                $html[] = '<li>';
-                                $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title1[0]), $id_title1[1]);
-                                foreach ($chapter->xpath('topicref') as $item)
-                                {
-                                    foreach ($item->children() as $child) {
-                                        echo process($child['href']);
-                                    }
-                                }
-                                $html[] = '</a>';
-                                $html[] = '</li>';
-                                $html[] = '</ul>';
-                            }
+                            process($chapter, $html, $ids_titles);
                             $html[] = '</div>';
-                            }
                         }
+                    }
+
 
                 $dom = new DOMDocument();
                 $dom->preserveWhiteSpace = FALSE;
