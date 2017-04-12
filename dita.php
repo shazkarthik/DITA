@@ -9,44 +9,20 @@
  * Author URI: http://www.medialeg.ch
  */
 
-require_once 'vendors/php-csv-utils-0.3/Csv/Dialect.php';
-require_once 'vendors/php-csv-utils-0.3/Csv/Writer.php';
-
 libxml_use_internal_errors(true);
-
-function dita_get_file($items)
-{
-    array_unshift($items, 'files');
-    array_unshift($items, rtrim(plugin_dir_path(__FILE__), '/'));
-    return implode(DIRECTORY_SEPARATOR, $items);
-}
-
-function dita_get_directory($items)
-{
-    $directory = dita_get_file($items);
-    if (!@is_dir($directory)) {
-        @mkdir($directory, 0777, true);
-    }
-    return $directory;
-}
-
-function dita_get_prefix()
-{
-    return sprintf('%sdita_', $GLOBALS['wpdb']->prefix);
-}
 
 function dita_insert_ditas($files)
 {
     for($i=0; $i<count($files['name']); $i++) {
         $contents = file_get_contents($files['tmp_name'][$i]);
         $title = (string) (array_pop(@simplexml_load_string($contents)->xpath('//topic/title/text()')));
-        $my_post = array();
-        $my_post['post_title']    = $title;
-        $my_post['post_content']  = $contents;
-        $my_post['post_status']   = 'publish';
-        $my_post['post_author']   = 1;
-        $my_post['post_category'] = array(0);
-        $ids_titles[] = wp_insert_post($my_post);
+        $dita_post = array();
+        $dita_post['post_title']    = $title;
+        $dita_post['post_content']  = $contents;
+        $dita_post['post_status']   = 'publish';
+        $dita_post['post_author']   = 1;
+        $dita_post['post_category'] = array(0);
+        $id = wp_insert_post($dita_post);
         $ids_titles[$files['name'][$i]] = array($id, $title);
 
     }
@@ -94,14 +70,6 @@ function dita_admin_menu()
         'dita_dashboard',
         ''
     );
-    add_submenu_page(
-        '/dita',
-        'F.A.Q',
-        'F.A.Q',
-        'manage_options',
-        '/dita/faq',
-        'dita_faq'
-    );
 }
 
 function dita_flashes()
@@ -118,28 +86,21 @@ function dita_flashes()
     <?php
 }
 
-function process($chapter, &$html, $ids_titles) {
-        $topicref = $chapter->xpath('topicref/@href');
-        if (empty($topicref)) {
-            return;
+function process($topicrefs, &$html, &$ids_titles) {
+    if (count($topicrefs) === 0) {
+        return;
+    }
+    $html[] = '<ul>';
+    foreach ($topicrefs as $topicref) {
+        $id_title = $ids_titles[(string) array_pop($topicref->xpath('@href'))];
+        if (!empty($id_title)) {
+            $html[] = '<li>';
+            $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
+            process($topicref->children(), $html, $ids_titles);
+            $html[] = '</li>';
         }
-        $id_title1 = $ids_titles[(string) array_pop($chapter->xpath('topicref/@href'))];
-        $html[] = '<ul>';
-        $html[] = '<li>';
-        $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title1[0]), $id_title1[1]);
-        foreach ($chapter->xpath('topicref') as $item)
-        {
-            foreach ($item->children() as $child) {
-                process($child, $html, $ids_titles);
-                foreach ($child->xpath('@href') AS $topic) {
-                    echo "<br/>";
-                    $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title1[0]), $id_title1[1]);
-                }
-            }
-        }
-        $html[] = '</a>';
-        $html[] = '</li>';
-        $html[] = '</ul>';
+    }
+    $html[] = '</ul>';
 }
 
 function dita_dashboard()
@@ -157,50 +118,71 @@ function dita_dashboard()
                 $ids_titles = dita_insert_ditas($_FILES['file_2']);
                 $html = array();
 
-                foreach (@simplexml_load_string(file_get_contents($_FILES['file_1']['tmp_name']))->xpath('//bookmap') AS $key => $value) {
-                    $html[] = sprintf('<h1>%s</h1>', (string) array_pop($value->xpath('title')));
-                    $html[] = sprintf('<p>%s</p>', (string) array_pop($value->xpath('abstract')));
+                foreach (@simplexml_load_string(file_get_contents($_FILES['file_1']['tmp_name']))->xpath(
+                    '//bookmap'
+                ) AS $key => $value) {
+                    $html[] = sprintf(
+                        '<h1>%s</h1>',
+                        (string) array_pop($value->xpath('title'))
+                    );
+                    $html[] = sprintf(
+                        '<p>%s</p>',
+                        (string) array_pop($value->xpath('abstract'))
+                    );
                 }
+                    $html[] = '<div>';
                     foreach ($value->xpath('//chapter') AS $chapter) {
                         $id_title = $ids_titles[(string) array_pop($chapter->xpath('@href'))];
                         if (!empty($id_title)) {
-                            $html[] = '<div>';
-                            $html[] = '<h2>';
-                            $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
+                            $html[] = '<h1>';
+                            $html[] = sprintf(
+                                '<a href="%s">%s</a> - %s',
+                                get_post_permalink($id_title[0]), $id_title[1],
+                                (string) array_pop($chapter->xpath('topichead/@navtitle'))
+                            );
                             $html[] = '</a>';
-                            $html[] = '</h2>';
-                            process($chapter, $html, $ids_titles);
-                            $html[] = '</div>';
+                            $html[] = '</h1>';
                         }
+                        process($chapter->children(), $html, $ids_titles);
                     }
-
+                    $html[] = '</div>';
 
                 $dom = new DOMDocument();
                 $dom->preserveWhiteSpace = FALSE;
                 $dom->loadHTML(implode("\n", $html));
                 $dom->formatOutput = TRUE;
-                $my_post = array();
-                $my_post['post_title'] = $_FILES['file_1']['name'];
-                $my_post['post_content'] = $dom->saveHTML();
-                $my_post['post_status'] = 'publish';
-                $my_post['post_author'] = 1;
-                $my_post['post_category'] = array(0);
-                $post_id = wp_insert_post($my_post);
+                $dita_post = array();
+                $dita_post['post_title'] = $_FILES['file_1']['name'];
+                $dita_post['post_content'] = $dom->saveHTML();
+                $dita_post['post_status'] = 'publish';
+                $dita_post['post_author'] = 1;
+                $dita_post['post_category'] = array(0);
+                $post_id = wp_insert_post($dita_post);
 
                 if ($post_id == 0 || is_wp_error($post_id)) {
                     $_SESSION['dita']['flashes'] = array(
-                        'error' => 'The document was not uploaded successfully. Please try again.',
+                        'error' => 'Your files are not saved successfully. Please try again.',
                     );
                     ?>
-                    <meta content="0;url=<?php echo admin_url('admin.php?action=&page=dita'); ?>"http-equiv="refresh">
+                    <meta
+                        content="0;url=<?php echo admin_url(
+                            'admin.php?action=&page=dita'
+                        ); ?>"
+                        http-equiv="refresh"
+                        >
                     <?php
                     die();
                 }
                 $_SESSION['dita']['flashes'] = array(
-                    'updated' => 'The document was uploaded successfully.',
+                    'updated' => 'Your files are saved successfully.',
                 );
                 ?>
-                <meta content="0;url=<?php echo admin_url('admin.php?action=&page=dita'); ?>"http-equiv="refresh">
+                <meta
+                    content="0;url=<?php echo admin_url(
+                        'admin.php?action=&page=dita'
+                    ); ?>"
+                    http-equiv="refresh"
+                    >
                 <?php
                 die();
             } else {
@@ -231,10 +213,6 @@ function dita_dashboard()
             }
             break;
         default:
-            $documents = $GLOBALS['wpdb']->get_results(
-                sprintf('SELECT * FROM `%sdocuments` ORDER BY `id` DESC', dita_get_prefix()),
-                ARRAY_A
-            );
             ?>
             <h1>
                 Documents
@@ -244,13 +222,6 @@ function dita_dashboard()
                     >Upload</a>
             </h1>
             <?php dita_flashes(); ?>
-            <?php if ($documents) : ?>
-
-            <?php else: ?>
-                <div class="error">
-                    <p><strong>There are no documents in the database.</strong></p>
-                </div>
-            <?php endif; ?>
             <?php
             break;
         }
@@ -260,10 +231,6 @@ function dita_dashboard()
     <?php
 }
 
-function dita_save_post($page_id)
-{
-}
 add_action('init', 'dita_init');
 
 add_action('admin_menu', 'dita_admin_menu');
-add_action('save_post', 'dita_save_post');
