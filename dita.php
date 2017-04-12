@@ -15,16 +15,17 @@ function dita_insert_ditas($files)
 {
     for($i=0; $i<count($files['name']); $i++) {
         $contents = file_get_contents($files['tmp_name'][$i]);
-        $title = (string) (array_pop(@simplexml_load_string($contents)->xpath('//topic/title/text()')));
+        $title = (string) (array_pop(@simplexml_load_string($contents)->xpath(
+            '//topic/title/text()'
+        )));
         $dita_post = array();
-        $dita_post['post_title']    = $title;
-        $dita_post['post_content']  = $contents;
-        $dita_post['post_status']   = 'publish';
-        $dita_post['post_author']   = 1;
+        $dita_post['post_title'] = $title;
+        $dita_post['post_content'] = $contents;
+        $dita_post['post_status'] = 'publish';
+        $dita_post['post_author'] = 1;
         $dita_post['post_category'] = array(0);
         $id = wp_insert_post($dita_post);
         $ids_titles[$files['name'][$i]] = array($id, $title);
-
     }
     return $ids_titles;
 }
@@ -86,7 +87,8 @@ function dita_flashes()
     <?php
 }
 
-function process($topicrefs, &$html, &$ids_titles) {
+function dita_process($topicrefs, &$html, &$ids_titles)
+{
     if (count($topicrefs) === 0) {
         return;
     }
@@ -95,8 +97,11 @@ function process($topicrefs, &$html, &$ids_titles) {
         $id_title = $ids_titles[(string) array_pop($topicref->xpath('@href'))];
         if (!empty($id_title)) {
             $html[] = '<li>';
-            $html[] = sprintf('<a href="%s">%s</a>', get_post_permalink($id_title[0]), $id_title[1]);
-            process($topicref->children(), $html, $ids_titles);
+            $html[] = sprintf(
+                '<a href="%s">%s</a>',
+                get_post_permalink($id_title[0]), $id_title[1]
+            );
+            dita_process($topicref->children(), $html, $ids_titles);
             $html[] = '</li>';
         }
     }
@@ -117,7 +122,6 @@ function dita_dashboard()
             if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $ids_titles = dita_insert_ditas($_FILES['file_2']);
                 $html = array();
-
                 foreach (@simplexml_load_string(file_get_contents($_FILES['file_1']['tmp_name']))->xpath(
                     '//bookmap'
                 ) AS $key => $value) {
@@ -130,22 +134,22 @@ function dita_dashboard()
                         (string) array_pop($value->xpath('abstract'))
                     );
                 }
-                    $html[] = '<div>';
-                    foreach ($value->xpath('//chapter') AS $chapter) {
-                        $id_title = $ids_titles[(string) array_pop($chapter->xpath('@href'))];
-                        if (!empty($id_title)) {
-                            $html[] = '<h1>';
-                            $html[] = sprintf(
-                                '<a href="%s">%s</a> - %s',
-                                get_post_permalink($id_title[0]), $id_title[1],
-                                (string) array_pop($chapter->xpath('topichead/@navtitle'))
-                            );
-                            $html[] = '</a>';
-                            $html[] = '</h1>';
-                        }
-                        process($chapter->children(), $html, $ids_titles);
+                $html[] = '<div>';
+                foreach ($value->xpath('//chapter') AS $chapter) {
+                    $id_title = $ids_titles[(string) array_pop($chapter->xpath('@href'))];
+                    if (!empty($id_title)) {
+                        $html[] = '<h1>';
+                        $html[] = sprintf(
+                            '<a href="%s">%s</a> - %s',
+                            get_post_permalink($id_title[0]), $id_title[1],
+                            (string) array_pop($chapter->xpath('topichead/@navtitle'))
+                        );
+                        $html[] = '</a>';
+                        $html[] = '</h1>';
                     }
-                    $html[] = '</div>';
+                    dita_process($chapter->children(), $html, $ids_titles);
+                }
+                $html[] = '</div>';
 
                 $dom = new DOMDocument();
                 $dom->preserveWhiteSpace = FALSE;
