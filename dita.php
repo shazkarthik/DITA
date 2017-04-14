@@ -11,6 +11,11 @@
 
 libxml_use_internal_errors(true);
 
+function dita_get_prefix()
+{
+    return sprintf('%sreferences_management_', $GLOBALS['wpdb']->prefix);
+}
+
 function dita_insert_ditas($files)
 {
     for($i=0; $i<count($files['name']); $i++) {
@@ -18,6 +23,36 @@ function dita_insert_ditas($files)
         $title = (string) (array_pop(@simplexml_load_string($contents)->xpath(
             '//topic/title/text()'
         )));
+        preg_match_all("/###(\d+).*?t=(\d+)##p=\d+/", $contents, $matches);
+        list($strings, $numbers, $citations) = $matches;
+        for ($index = 0; $index < count($strings) ; $index ++) {
+            $style = '';
+            $id = $GLOBALS['wpdb']->get_var(
+                sprintf(
+                    'SELECT `id` FROM `%sarticles` WHERE `number` = %s',
+                    dita_get_prefix(),
+                    $numbers[$index]
+                )
+            );
+            if (intval($citations[$index]) === 1) {
+                $style = "citations_first";
+            }
+            elseif (intval($citations[$index]) === 2) {
+                $style = "citations_subsequent";
+            }
+            elseif (intval($citations[$index]) === 3) {
+                $style = "citations_parenthetical_first";
+            }
+            elseif (intval($citations[$index]) === 4) {
+                $style = "citations_parenthetical_subsequent";
+            }
+            $contents = preg_replace(
+                sprintf('/%s/', $strings[$index]),
+                sprintf('[references_management id="%s" style="%s"]', $id, $style),
+                $contents
+            );
+        }
+        file_put_contents($_FILES['file_2']['tmp_name'][$i], $contents);
         $dita_post = array();
         $dita_post['post_title'] = $title;
         $dita_post['post_content'] = $contents;
