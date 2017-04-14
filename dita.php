@@ -46,8 +46,8 @@ function dita_insert_ditas($files)
             elseif (intval($citations[$index]) === 4) {
                 $style = "citations_parenthetical_subsequent";
             }
-            $contents = preg_replace(
-                sprintf('/%s/', $strings[$index]),
+            $contents = str_replace(
+                sprintf('%s', $strings[$index]),
                 sprintf('[references_management id="%s" style="%s"]', $id, $style),
                 $contents
             );
